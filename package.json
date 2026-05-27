@@ -1,0 +1,12 @@
+{
+	"name": "crusher",
+	"version": "1.0.0",
+	"description": "App maintenance control panel",
+	"main": "server.js",
+	"scripts": {
+		"start": "node server.js"
+	},
+	"dependencies": {
+		"express": "^4.19.2"
+	}
+}

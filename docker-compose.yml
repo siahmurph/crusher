@@ -1,0 +1,9 @@
+services:
+  crusher:
+    image: ghcr.io/siahmurph/crusher:latest
+    container_name: crusher
+    ports:
+      - "8030:3000"
+    volumes:
+      - /var/crusher:/data
+    restart: unless-stopped
