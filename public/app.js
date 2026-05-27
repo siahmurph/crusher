@@ -11,8 +11,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadAll () {
   try {
     const [metaRes, statusRes] = await Promise.all([
-      fetch('/api/apps'),
-      fetch('/status.json', { cache: 'no-store' })
+      fetch('api/apps'),
+      fetch('status.json', { cache: 'no-store' })
     ])
     appsMeta = await metaRes.json()
     currentStatus = await statusRes.json()
@@ -130,7 +130,7 @@ async function toggle (key) {
   const btn = document.getElementById(`toggle-${key}`)
   btn.disabled = true
   try {
-    const res = await fetch('/api/toggle', {
+    const res = await fetch('api/toggle', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ app: key })
@@ -146,7 +146,7 @@ async function toggle (key) {
 async function saveMessage (key) {
   const message = document.getElementById(`msg-${key}`).value
   try {
-    const res = await fetch('/api/message', {
+    const res = await fetch('api/message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ app: key, message })
