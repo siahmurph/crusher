@@ -5,6 +5,8 @@ const path = require('path')
 const app = express()
 const PORT = 3000
 const STATUS_FILE = process.env.STATUS_FILE || '/data/status.json'
+const PORTAINER =
+  process.env.PORTAINER_URL || 'http://host.docker.internal:9000'
 
 const APPS = {
   fido: { label: 'FiDO 2.0', path: '/fido/', icon: 'bi-camera-reels-fill' },
@@ -23,6 +25,16 @@ const APPS = {
     path: '/purgeomatic/',
     icon: 'bi-trash3-fill'
   }
+}
+
+// Maps app/service key → Docker container_name
+const CONTAINER_MAP = {
+  fido: 'fido2',
+  sandpiper: 'sandpiper',
+  parouter: 'parouter',
+  purgomatic: 'purgomatic',
+  vanmanager: 'vanmanager',
+  crusher: 'crusher'
 }
 
 const DEFAULT_STATUS = Object.fromEntries(
@@ -91,6 +103,33 @@ app.post('/api/message', (req, res) => {
   status[key].updated_at = new Date().toISOString()
   writeStatus(status)
   res.json(status)
+})
+
+// Container statuses per compose stack from Portainer
+app.get('/api/stacks', async (_req, res) => {
+  const apiKey = process.env.PORTAINER_API_KEY
+  const endpointId = process.env.PORTAINER_ENDPOINT || '1'
+  if (!apiKey) return res.status(503).json({ error: 'PORTAINER_API_KEY not configured' })
+  try {
+    const r = await fetch(
+      `${PORTAINER}/api/endpoints/${endpointId}/docker/containers/json?all=true`,
+      { headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(5000) }
+    )
+    if (!r.ok) return res.status(502).json({ error: `Portainer returned ${r.status}` })
+    const containers = await r.json()
+    const stacks = {}
+    for (const c of containers) {
+      const project = c.Labels?.['com.docker.compose.project']
+      const service = c.Labels?.['com.docker.compose.service']
+      if (!project) continue
+      if (!stacks[project]) stacks[project] = []
+      stacks[project].push({ service: service || 'unknown', state: c.State })
+    }
+    res.set('Cache-Control', 'no-store')
+    res.json(stacks)
+  } catch (err) {
+    res.status(502).json({ error: 'Portainer unreachable', detail: err.message })
+  }
 })
 
 app.listen(PORT, () => console.log(`Crusher listening on :${PORT}`))

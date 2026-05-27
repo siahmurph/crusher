@@ -7,3 +7,6 @@ services:
     volumes:
       - /var/crusher:/data
     restart: unless-stopped
+    environment:
+      - PORTAINER_API_KEY=ptr_nt8z8SiZJPfPICOTtdqUyNbyBAAzzimalIwUSFGyZek=
+      - PORTAINER_ENDPOINT=1
