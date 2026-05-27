@@ -75,7 +75,11 @@ function appCard (key, meta, s, isDown) {
         <div class="d-flex align-items-center justify-content-between">
           <div class="d-flex align-items-center gap-2">
             <i class="bi ${meta.icon} app-icon"></i>
-            <span class="fw-semibold">${meta.label}</span>
+            <a href="${
+              meta.path
+            }" target="_blank" rel="noopener" class="fw-semibold text-decoration-none link-body-emphasis">${
+    meta.label
+  }</a>
           </div>
           <span class="badge status-badge ${badgeClass}" id="badge-${key}">${badgeText}</span>
         </div>
