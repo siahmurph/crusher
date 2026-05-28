@@ -130,10 +130,20 @@ app.get('/api/stacks', async (_req, res) => {
     res.set('Cache-Control', 'no-store')
     res.json(stacks)
   } catch (err) {
+    console.error(
+      '[stacks] Portainer unreachable:',
+      err.message,
+      '| URL:',
+      PORTAINER
+    )
     res
       .status(502)
       .json({ error: 'Portainer unreachable', detail: err.message })
   }
 })
 
-app.listen(PORT, () => console.log(`Crusher listening on :${PORT}`))
+app.listen(PORT, () => {
+  console.log(`Crusher listening on :${PORT}`)
+  console.log(`Portainer URL: ${PORTAINER}`)
+  console.log(`Portainer API key set: ${!!process.env.PORTAINER_API_KEY}`)
+})
