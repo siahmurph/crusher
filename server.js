@@ -109,26 +109,30 @@ app.post('/api/message', (req, res) => {
 app.get('/api/stacks', async (_req, res) => {
   const apiKey = process.env.PORTAINER_API_KEY
   const endpointId = process.env.PORTAINER_ENDPOINT || '1'
-  if (!apiKey) return res.status(503).json({ error: 'PORTAINER_API_KEY not configured' })
+  if (!apiKey)
+    return res.status(503).json({ error: 'PORTAINER_API_KEY not configured' })
   try {
     const r = await fetch(
       `${PORTAINER}/api/endpoints/${endpointId}/docker/containers/json?all=true`,
       { headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(5000) }
     )
-    if (!r.ok) return res.status(502).json({ error: `Portainer returned ${r.status}` })
+    if (!r.ok)
+      return res.status(502).json({ error: `Portainer returned ${r.status}` })
     const containers = await r.json()
     const stacks = {}
     for (const c of containers) {
       const project = c.Labels?.['com.docker.compose.project']
-      const service = c.Labels?.['com.docker.compose.service']
       if (!project) continue
-      if (!stacks[project]) stacks[project] = []
-      stacks[project].push({ service: service || 'unknown', state: c.State })
+      if (!stacks[project]) stacks[project] = { running: 0, total: 0 }
+      stacks[project].total++
+      if (c.State === 'running') stacks[project].running++
     }
     res.set('Cache-Control', 'no-store')
     res.json(stacks)
   } catch (err) {
-    res.status(502).json({ error: 'Portainer unreachable', detail: err.message })
+    res
+      .status(502)
+      .json({ error: 'Portainer unreachable', detail: err.message })
   }
 })
 
