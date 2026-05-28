@@ -3,10 +3,24 @@ const fs = require('fs')
 const path = require('path')
 
 const app = express()
-const PORT = 3000
+const PORT = Number(process.env.PORT || 3000)
 const STATUS_FILE = process.env.STATUS_FILE || '/data/status.json'
-const PORTAINER =
-  process.env.PORTAINER_URL || 'http://host.docker.internal:9000'
+
+function getPortainerUrls () {
+  const configured = process.env.PORTAINER_URLS?.split(',')
+    .map(url => url.trim())
+    .filter(Boolean)
+
+  if (configured?.length) return configured
+
+  const urls = []
+  const primary = process.env.PORTAINER_URL?.trim()
+  if (primary) urls.push(primary)
+  urls.push('http://portainer:9000', 'http://host.docker.internal:9000')
+  return [...new Set(urls)]
+}
+
+const PORTAINER_URLS = getPortainerUrls()
 
 const APPS = {
   fido: { label: 'FiDO 2.0', path: '/fido/', icon: 'bi-camera-reels-fill' },
@@ -27,14 +41,32 @@ const APPS = {
   }
 }
 
-// Maps app/service key → Docker container_name
-const CONTAINER_MAP = {
-  fido: 'fido2',
-  sandpiper: 'sandpiper',
-  parouter: 'parouter',
-  purgomatic: 'purgomatic',
-  vanmanager: 'vanmanager',
-  crusher: 'crusher'
+const STACK_ALIASES = {
+  fido: ['fido', 'fido2', 'fido2.0'],
+  sandpiper: ['sandpiper', 'sandpiper-op2'],
+  parouter: ['parouter'],
+  purgomatic: ['purgomatic', 'purgeomatic'],
+  vanmanager: ['vanmanager'],
+  crusher: ['crusher']
+}
+
+function normalizeStacks (rawStacks) {
+  const normalized = {}
+
+  for (const [appKey, aliases] of Object.entries(STACK_ALIASES)) {
+    for (const alias of aliases) {
+      if (rawStacks[alias]) {
+        normalized[appKey] = rawStacks[alias]
+        break
+      }
+    }
+  }
+
+  for (const [stackName, counts] of Object.entries(rawStacks)) {
+    if (!(stackName in normalized)) normalized[stackName] = counts
+  }
+
+  return normalized
 }
 
 const DEFAULT_STATUS = Object.fromEntries(
@@ -111,30 +143,58 @@ app.get('/api/stacks', async (_req, res) => {
   const endpointId = process.env.PORTAINER_ENDPOINT || '1'
   if (!apiKey)
     return res.status(503).json({ error: 'PORTAINER_API_KEY not configured' })
+
+  const errors = []
+
   try {
-    const r = await fetch(
-      `${PORTAINER}/api/endpoints/${endpointId}/docker/containers/json?all=true`,
-      { headers: { 'X-API-Key': apiKey }, signal: AbortSignal.timeout(5000) }
-    )
-    if (!r.ok)
-      return res.status(502).json({ error: `Portainer returned ${r.status}` })
-    const containers = await r.json()
-    const stacks = {}
-    for (const c of containers) {
-      const project = c.Labels?.['com.docker.compose.project']
-      if (!project) continue
-      if (!stacks[project]) stacks[project] = { running: 0, total: 0 }
-      stacks[project].total++
-      if (c.State === 'running') stacks[project].running++
+    for (const baseUrl of PORTAINER_URLS) {
+      try {
+        const r = await fetch(
+          `${baseUrl}/api/endpoints/${endpointId}/docker/containers/json?all=true`,
+          {
+            headers: { 'X-API-Key': apiKey },
+            signal: AbortSignal.timeout(5000)
+          }
+        )
+
+        if (!r.ok) {
+          const body = (await r.text()).trim()
+          const detail = body || r.statusText || 'No response body'
+          errors.push(
+            `${baseUrl} endpoint=${endpointId} -> HTTP ${r.status} ${detail}`
+          )
+          continue
+        }
+
+        const containers = await r.json()
+        const stacks = {}
+        for (const c of containers) {
+          const project = c.Labels?.['com.docker.compose.project']
+          if (!project) continue
+          if (!stacks[project]) stacks[project] = { running: 0, total: 0 }
+          stacks[project].total++
+          if (c.State === 'running') stacks[project].running++
+        }
+
+        res.set('Cache-Control', 'no-store')
+        return res.json(normalizeStacks(stacks))
+      } catch (err) {
+        errors.push(`${baseUrl} -> ${err.message}`)
+      }
     }
-    res.set('Cache-Control', 'no-store')
-    res.json(stacks)
+
+    console.error('[stacks] Portainer unreachable:', errors.join(' | '))
+    res.status(502).json({
+      error: 'Portainer unreachable',
+      tried: PORTAINER_URLS,
+      detail: errors
+    })
   } catch (err) {
     console.error(
       '[stacks] Portainer unreachable:',
       err.message,
-      '| URL:',
-      PORTAINER
+      '| URLs:',
+      PORTAINER_URLS.join(', ')
     )
     res
       .status(502)
@@ -144,6 +204,7 @@ app.get('/api/stacks', async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Crusher listening on :${PORT}`)
-  console.log(`Portainer URL: ${PORTAINER}`)
+  console.log(`Portainer URLs: ${PORTAINER_URLS.join(', ')}`)
+  console.log(`Portainer endpoint: ${process.env.PORTAINER_ENDPOINT || '1'}`)
   console.log(`Portainer API key set: ${!!process.env.PORTAINER_API_KEY}`)
 })

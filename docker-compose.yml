@@ -7,12 +7,14 @@ services:
     volumes:
       - /var/crusher:/data
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - portainer_default
     environment:
-      - PORTAINER_URL=http://portainer:9000
-      - PORTAINER_API_KEY=ptr_nt8z8SiZJPfPICOTtdqUyNbyBAAzzimalIwUSFGyZek=
-      - PORTAINER_ENDPOINT=1
+      PORTAINER_URLS: http://portainer:9000,http://host.docker.internal:9000
+      PORTAINER_API_KEY: ${PORTAINER_API_KEY}
+      PORTAINER_ENDPOINT: "3"
 
 networks:
   portainer_default:
